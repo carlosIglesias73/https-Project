@@ -31,7 +31,7 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// Login
+// routes/auth.js
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -46,9 +46,10 @@ router.post('/login', async (req, res) => {
     // Registrar log de inicio de sesión exitoso
     await LoginLog.create({
       userId: user.id,
-      ip: req.ip || req.connection.remoteAddress,
-      userAgent: req.get('User-Agent'),
-      success: true
+      ip: req.ip || req.connection.remoteAddress || '127.0.0.1', // Asegura una IP
+      userAgent: req.get('User-Agent') || 'Unknown', // Asegura un valor
+      success: true,
+      code: null // Agregamos explícitamente NULL para evitar el error
     });
 
     res.json({ token, message: 'Login exitoso', userId: user.id });
