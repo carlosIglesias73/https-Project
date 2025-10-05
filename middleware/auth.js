@@ -11,10 +11,11 @@ const authMiddleware = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'change_this_secret');
-    req.user = await User.findById(decoded.id).select('-passwordHash');
-    if (!req.user) {
+    const user = await User.findById(decoded.id);
+    if (!user) {
       return res.status(401).json({ message: 'Token inválido o usuario no encontrado.' });
     }
+    req.user = user;
     next();
   } catch (err) {
     res.status(401).json({ message: 'Token inválido.' });

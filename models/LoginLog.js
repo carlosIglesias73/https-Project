@@ -1,19 +1,15 @@
 // models/LoginLog.js
-const mongoose = require('mongoose');
+const db = require('../config/db');
 
-const loginLogSchema = new mongoose.Schema({
-  userId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
-  },
-  ip: { type: String, required: true },
-  userAgent: { type: String },
-  success: { type: Boolean, default: true },
-  duration: { type: Number }, // en segundos
-  startedAt: { type: Date, default: Date.now },
-  endedAt: { type: Date },
-  code: { type: String } // Para el código de 8 caracteres (futuro)
-}, { timestamps: true });
+const LoginLog = {
+  create: async ({ userId, ip, userAgent, success, code }) => {
+    const query = `
+      INSERT INTO login_logs (user_id, ip, user_agent, success, code)
+      VALUES (?, ?, ?, ?, ?)
+    `;
+    const [result] = await db.execute(query, [userId, ip, userAgent, success, code]);
+    return result.insertId;
+  }
+};
 
-module.exports = mongoose.model('LoginLog', loginLogSchema);
+module.exports = LoginLog;
