@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <title><%= title %></title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="./css/styles.css">
+</head>
+<body>
+  <div class="container">
+    <h1><%= title %></h1>
+    <p style="text-align: center; margin: 20px 0;"><%= message %></p>
+    
+    <div style="text-align: center; margin-top: 30px;">
+      <a href="<%= redirectUrl %>" style="
+        display: inline-block;
+        padding: 14px 30px;
+        background: #3498db;
+        color: white;
+        text-decoration: none;
+        border-radius: 8px;
+        font-weight: 500;
+        transition: all 0.2s ease;
+      "><%= redirectText %></a>
+    </div>
+
+    <p id="countdown-text" style="text-align: center; margin-top: 20px; color: #6c757d; font-size: 14px;">
+      Redirigiendo automáticamente en <span id="countdown">5</span> segundos...
+    </p>
+  </div>
+
+  <script>
+    let timeLeft = 5;
+    const countdownElement = document.getElementById('countdown');
+    const redirectUrl = '<%= redirectUrl %>';
+    
+    const timer = setInterval(() => {
+      timeLeft--;
+      countdownElement.textContent = timeLeft;
+      if (timeLeft <= 0) {
+        clearInterval(timer);
+        window.location.href = redirectUrl;
+      }
+    }, 1000);
+  </script>
+</body>
+</html>
