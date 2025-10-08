@@ -1,6 +1,30 @@
-// Elemento de salida
-const out = document.getElementById('out');
-
+(async () => {
+  try {
+    const { data } = await API.me(); // Usamos la función 'me' definida en api.js
+    if (data && data.user) {
+      document.getElementById('user-info').innerHTML = `
+        <p><strong>Email:</strong> ${data.user.email}</p>
+        <p><strong>Nombre:</strong> ${data.user.name}</p>
+        <p style="margin-top: 8px;"><strong>ID:</strong> ${data.user.id}</p>
+        ${data.user.last_login ? `<p><strong>Último login:</strong> ${new Date(data.user.last_login).toLocaleString()}</p>` : ''}
+      `;
+      // Opcional: Actualizar 'out' con éxito (si se desea mostrar la respuesta completa)
+      // out.textContent = JSON.stringify(data, null, 2);
+    } else {
+      throw new Error('Datos de usuario no disponibles o sesión inválida');
+    }
+  } catch (error) {
+    console.error('Error al cargar usuario:', error);
+    document.getElementById('user-info').innerHTML = `
+      <p style="color: #e74c3c;">
+        <strong>Error:</strong> No se pudieron cargar los datos del usuario
+      </p>
+      <p style="font-size: 12px; margin-top: 8px;">${error.message}</p>
+    `;
+    // Opcional: Mostrar error en 'out' (si se desea mostrar el error allí también)
+    // out.textContent = `Error al cargar usuario: ${error.message}`;
+  }
+})();
 // FORMULARIO DE REGISTRO
 document.getElementById('register')?.addEventListener('submit', async e => {
   e.preventDefault();
