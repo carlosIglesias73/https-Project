@@ -73,7 +73,7 @@ const authController = {
     }
   },
 
-  // Verificación MFA - Paso 2: Validar código y generar JWT
+  // ✅ Verificación MFA - Paso 2: Validar código y generar JWT con cookie segura
   verifyMfa: async (req, res) => {
     try {
       const { logId, code } = req.body;
@@ -90,12 +90,20 @@ const authController = {
       // Obtener usuario
       const user = await User.findById(log.user_id);
       
-      // Generar token JWT
+      // Generar token JWT con expiración corta
       const token = jwt.sign(
         { id: user.id, email: user.email }, 
         JWT_SECRET, 
         { expiresIn: '1h' }
       );
+
+      // ✅ Establecer cookie httpOnly segura
+      res.cookie('token', token, {
+        httpOnly: true,      // No accesible por JavaScript (protección XSS)
+        secure: process.env.NODE_ENV === 'production', // Solo HTTPS en producción
+        sameSite: 'strict',  // Protección CSRF
+        maxAge: 3600000      // 1 hora en milisegundos
+      });
 
       // Actualizar log como exitoso
       await LoginLog.updateSuccess(log.id);
@@ -104,13 +112,13 @@ const authController = {
       await User.updateLastLogin(user.id);
 
       res.json({ 
-        token, 
         message: 'Autenticación exitosa',
         user: {
           id: user.id,
           email: user.email,
           name: user.name
         }
+        // ✅ NO enviar token en el body (ya está en cookie segura)
       });
     } catch (err) {
       console.error('Error en verifyMfa:', err);
@@ -118,19 +126,26 @@ const authController = {
     }
   },
 
-  // En authController.js - logout (mejorado)
+  // ✅ Logout mejorado con limpieza de cookie
   logout: async (req, res) => {
     try {
       const activeLog = await LoginLog.findByUserIdAndActive(req.user.id);
 
       if (activeLog) {
         await LoginLog.updateLogout(activeLog.id);
-        res.json({ message: 'Sesión cerrada exitosamente' });
       } else {
         // Si no hay sesión activa, cerrar todas las sesiones recientes
         await LoginLog.closeAllActiveSessions(req.user.id);
-        res.json({ message: 'Todas las sesiones han sido cerradas' });
       }
+
+      // ✅ Limpiar cookie de autenticación
+      res.clearCookie('token', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict'
+      });
+
+      res.json({ message: 'Sesión cerrada exitosamente' });
     } catch (err) {
       console.error('Error en logout:', err);
       res.status(500).json({ message: 'Error interno del servidor' });

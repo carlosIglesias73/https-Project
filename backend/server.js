@@ -1,36 +1,83 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const cookieParser = require('cookie-parser');
 
 // Importar rutas
 const authRoutes = require('./src/routes/auth.routes');
-const initRoutes = require('./src/routes/init.routes'); // 👈 Nueva ruta
+const initRoutes = require('./src/routes/init.routes'); // 👈 NUEVO
 
 // Conexión a MySQL
 const db = require('./src/config/database');
 
 const app = express();
 
-// Configuración de CORS - MUY PERMISIVA para desarrollo
+// ✅ CABECERAS DE SEGURIDAD con Helmet
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:"],
+    }
+  },
+  xFrameOptions: { action: 'deny' },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true
+  }
+}));
+
+// ✅ RATE LIMITING - Prevenir ataques de fuerza bruta
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 100, // Límite de 100 peticiones por IP
+  message: 'Demasiadas peticiones desde esta IP, intenta de nuevo más tarde.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use('/api/', limiter);
+
+// Rate limiting específico para login
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5, // Solo 5 intentos de login por IP
+  message: 'Demasiados intentos de login, intenta de nuevo en 15 minutos.',
+  skipSuccessfulRequests: true
+});
+
+// CORS configurado correctamente
 const corsOptions = {
-  origin: true, // Permitir TODOS los orígenes en desarrollo
+  origin: process.env.NODE_ENV === 'production' 
+    ? process.env.FRONTEND_URL || 'https://tu-frontend.vercel.app'
+    : true, // En desarrollo permite todo
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
-  exposedHeaders: ['Content-Length', 'X-JSON'],
-  maxAge: 86400 // 24 horas
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 };
 
 app.use(cors(corsOptions));
 
 // Middlewares
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
+app.use(express.json({ limit: '10kb' }));
+app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
-// Logging middleware (solo en desarrollo)
+// ✅ LOGGING SEGURO - No loggear datos sensibles
 if (process.env.NODE_ENV === 'development') {
   app.use((req, res, next) => {
-    console.log(`${req.method} ${req.path}`, req.body);
+    const sanitizedBody = { ...req.body };
+    
+    // Ocultar campos sensibles en logs
+    if (sanitizedBody.password) sanitizedBody.password = '***';
+    if (sanitizedBody.code) sanitizedBody.code = '***';
+    
+    console.log(`${req.method} ${req.path}`, sanitizedBody);
     next();
   });
 }
@@ -41,13 +88,13 @@ app.get('/health', (req, res) => {
     status: 'ok', 
     timestamp: new Date().toISOString(),
     service: 'auth-api',
-    env: process.env.NODE_ENV
+    env: process.env.NODE_ENV || 'development'
   });
 });
 
 // Rutas API
+app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth', authRoutes);
-//app.use('/api/init', initRoutes); // 👈 Registrar ruta de inicialización
 
 // Manejo de rutas no encontradas
 app.use((req, res) => {
@@ -59,14 +106,17 @@ app.use((req, res) => {
 
 // Manejo de errores global
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
+  console.error('Error:', err.message);
+  
   res.status(err.status || 500).json({
-    message: err.message || 'Error interno del servidor',
+    message: process.env.NODE_ENV === 'production' 
+      ? 'Error interno del servidor' 
+      : err.message,
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
   });
 });
 
-// Verificar conexión a MySQL al iniciar (pero no crashear si falla)
+// Verificar conexión a MySQL al iniciar
 db.getConnection()
   .then(() => {
     console.log('✅ Conexión a MySQL exitosa.');
@@ -74,10 +124,9 @@ db.getConnection()
   .catch(err => {
     console.error('❌ Error al conectar a MySQL:', err.message);
     console.log('⚠️  La aplicación continuará ejecutándose, pero algunas funciones pueden no trabajar correctamente.');
-    // NO usar process.exit(1) para que la app pueda servir el endpoint de inicialización
   });
 
-// Levantar servidor HTTP
+// Levantar servidor HTTP (Vercel maneja HTTPS automáticamente)
 const port = process.env.PORT || 4000;
 const server = app.listen(port, '0.0.0.0', () => {
   const address = server.address();
@@ -85,7 +134,8 @@ const server = app.listen(port, '0.0.0.0', () => {
   console.log(`📍 Entorno: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔗 Health check: http://localhost:${port}/health`);
   console.log(`🌐 Escuchando en: ${address.address}:${address.port}`);
-  console.log(`✅ CORS habilitado para todos los orígenes (development mode)`);
+  console.log(`🔒 HTTPS: ${process.env.NODE_ENV === 'production' ? 'Manejado por Vercel' : 'Deshabilitado (desarrollo)'}`);
+  console.log(`✅ CORS habilitado para: ${process.env.NODE_ENV === 'production' ? process.env.FRONTEND_URL : 'todos los orígenes (dev)'}`);
 });
 
 module.exports = app;

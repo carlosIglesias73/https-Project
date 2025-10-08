@@ -7,19 +7,30 @@ const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret';
 
 /**
  * Middleware para proteger rutas API (JSON)
- * Verifica el token desde el header Authorization
+ * Verifica el token desde cookies o header Authorization
  */
 const authMiddleware = async (req, res, next) => {
-  const authHeader = req.header('Authorization');
-  
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  let token = null;
+
+  // ✅ 1. Intentar obtener token de cookies primero (más seguro)
+  if (req.cookies && req.cookies.token) {
+    token = req.cookies.token;
+  }
+  // 2. Fallback al header Authorization
+  else if (req.header('Authorization')) {
+    const authHeader = req.header('Authorization');
+    if (authHeader.startsWith('Bearer ')) {
+      token = authHeader.replace('Bearer ', '');
+    }
+  }
+
+  if (!token) {
     return res.status(401).json({ 
       message: 'Acceso denegado. Token no proporcionado.' 
     });
   }
 
   try {
-    const token = authHeader.replace('Bearer ', '');
     const decoded = jwt.verify(token, JWT_SECRET);
     
     // Buscar usuario en la base de datos
@@ -46,7 +57,6 @@ const authMiddleware = async (req, res, next) => {
     if (err.name === 'TokenExpiredError') {
       // Token expirado - cerrar sesiones activas automáticamente
       try {
-        const token = authHeader.replace('Bearer ', '');
         const decoded = jwt.decode(token);
         if (decoded && decoded.id) {
           await LoginLog.closeAllActiveSessions(decoded.id);
