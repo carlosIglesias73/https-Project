@@ -39,7 +39,7 @@ app.use(helmet({
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
   max: 100, // Límite de 100 peticiones por IP
-  message: 'Demasiadas peticiones desde esta IP, intenta de nuevo más tarde.',
+  message: { message: 'Demasiadas peticiones desde esta IP, intenta de nuevo más tarde.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -49,9 +49,11 @@ app.use('/api/', limiter);
 // Rate limiting específico para login
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5, // Solo 5 intentos de login por IP
-  message: 'Demasiados intentos de login, intenta de nuevo en 15 minutos.',
-  skipSuccessfulRequests: true
+  max: process.env.NODE_ENV === 'production' ? 10 : 100, // Más intentos en desarrollo
+  message: { message: 'Demasiados intentos de login, intenta de nuevo en 15 minutos.' },
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
 // ✅ CORS CONFIGURADO CORRECTAMENTE
