@@ -66,27 +66,28 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin: (origin, callback) => {
-    // Permitir requests sin origin (Postman, curl, servidor a servidor)
-    if (!origin) return callback(null, true);
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'http://localhost:4000', 
+      'https://auth-frontend-rosy.vercel.app',
+      process.env.FRONTEND_URL
+    ].filter(Boolean);
     
-    // En desarrollo, permitir todos
+    // En desarrollo permitir todos
     if (process.env.NODE_ENV === 'development') {
       return callback(null, true);
     }
     
-    // En producción, verificar lista blanca
-    if (allowedOrigins.includes(origin)) {
+    if (allowedOrigins.includes(origin) || !origin) {
       callback(null, true);
     } else {
-      console.log('❌ Origen bloqueado por CORS:', origin);
       callback(new Error('No permitido por CORS'));
     }
   },
-  credentials: true,
+  credentials: true, // ✅ IMPORTANTE: Permitir cookies
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  exposedHeaders: ['Content-Length', 'X-JSON'],
-  maxAge: 86400 // 24 horas
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Content-Length', 'X-JSON']
 };
 
 app.use(cors(corsOptions));
