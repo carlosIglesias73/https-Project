@@ -7,14 +7,14 @@ const cookieParser = require('cookie-parser');
 
 // Importar rutas
 const authRoutes = require('./src/routes/auth.routes');
-const initRoutes = require('./src/routes/init.routes'); // 👈 NUEVO
+const initRoutes = require('./src/routes/init.routes');
 
 // Conexión a MySQL
 const db = require('./src/config/database');
 
 const app = express();
 
-// ✅ IMPORTANTE: Confiar en proxies (necesario para Vercel/Railway)
+// ✅ CRÍTICO: Confiar en proxies (Vercel/Railway usan X-Forwarded-For)
 app.set('trust proxy', 1);
 
 // ✅ CABECERAS DE SEGURIDAD con Helmet
@@ -54,17 +54,17 @@ const loginLimiter = rateLimit({
   skipSuccessfulRequests: true
 });
 
-// CORS configurado correctamente
+// ✅ CORS CONFIGURADO CORRECTAMENTE
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:4000',
-  'https://auth-frontend-rosy.vercel.app', // Tu frontend en producción
+  'https://auth-frontend-rosy.vercel.app',
   process.env.FRONTEND_URL
 ].filter(Boolean);
 
 const corsOptions = {
   origin: (origin, callback) => {
-    // Permitir requests sin origin (como Postman, curl)
+    // Permitir requests sin origin (Postman, curl, servidor a servidor)
     if (!origin) return callback(null, true);
     
     // En desarrollo, permitir todos
@@ -121,7 +121,7 @@ app.get('/health', (req, res) => {
 // Rutas API
 app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth', authRoutes);
-app.use('/api/init', initRoutes); // 👈 NUEVO - Rutas de inicialización
+app.use('/api/init', initRoutes);
 
 // Manejo de rutas no encontradas
 app.use((req, res) => {
@@ -162,7 +162,8 @@ const server = app.listen(port, '0.0.0.0', () => {
   console.log(`🔗 Health check: http://localhost:${port}/health`);
   console.log(`🌐 Escuchando en: ${address.address}:${address.port}`);
   console.log(`🔒 HTTPS: ${process.env.NODE_ENV === 'production' ? 'Manejado por Vercel' : 'Deshabilitado (desarrollo)'}`);
-  console.log(`✅ CORS habilitado para: ${process.env.NODE_ENV === 'production' ? process.env.FRONTEND_URL : 'todos los orígenes (dev)'}`);
+  console.log(`✅ Trust proxy: ${app.get('trust proxy')}`);
+  console.log(`✅ CORS configurado para: ${allowedOrigins.join(', ')}`);
 });
 
 module.exports = app;
