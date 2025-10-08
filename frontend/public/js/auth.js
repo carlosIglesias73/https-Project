@@ -13,8 +13,27 @@ function isTokenExpired(token) {
   }
 }
 
-// Función para verificar autenticación y redirigir si es necesario
-function checkAuth() {
+// ✅ Función para verificar si hay una sesión activa (con cookies)
+async function isAuthenticated() {
+  try {
+    // Intentar hacer una petición a /me para verificar la sesión
+    const response = await fetch(`${API_URL}/me`, {
+      method: 'GET',
+      credentials: 'include', // Importante: enviar cookies
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    return response.ok;
+  } catch (error) {
+    console.error('Error verificando autenticación:', error);
+    return false;
+  }
+}
+
+// ✅ Función para verificar autenticación y redirigir si es necesario
+async function checkAuth() {
   const currentPath = window.location.pathname;
 
   // Proteger ruta /mfa
@@ -22,22 +41,30 @@ function checkAuth() {
     if (!localStorage.getItem('logId')) {
       window.location.href = '/';
     }
+    return; // No verificar sesión en MFA
   }
 
   // Proteger ruta /welcome
   if (currentPath === '/welcome') {
-    const token = localStorage.getItem('token');
-    if (!token || isTokenExpired(token)) {
+    const authenticated = await isAuthenticated();
+    
+    if (!authenticated) {
+      console.log('❌ No hay sesión activa, redirigiendo a login...');
       localStorage.removeItem('token');
       localStorage.removeItem('logId');
       window.location.href = '/';
+    } else {
+      console.log('✅ Sesión activa verificada');
     }
+    return;
   }
 
   // Redirigir desde login si ya está autenticado
   if (currentPath === '/' || currentPath === '/register') {
-    const token = localStorage.getItem('token');
-    if (token && !isTokenExpired(token)) {
+    const authenticated = await isAuthenticated();
+    
+    if (authenticated) {
+      console.log('✅ Ya hay sesión activa, redirigiendo a welcome...');
       window.location.href = '/welcome';
     }
   }
