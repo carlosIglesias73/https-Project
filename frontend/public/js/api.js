@@ -18,25 +18,24 @@ async function apiRequest(endpoint, options = {}) {
   const url = `${API_URL}${endpoint}`;
   
   console.log('🔍 Realizando petición a:', url);
-  console.log('📦 Opciones:', options);
   
   const defaultOptions = {
-    mode: 'cors', // Importante: habilitar CORS
+    mode: 'cors',
+    credentials: 'include', // ✅ CRÍTICO: Incluir cookies en todas las peticiones
     headers: {
       'Content-Type': 'application/json',
       ...options.headers
     }
   };
 
-  // Agregar token si existe
-  const token = localStorage.getItem('token');
-  if (token && !options.skipAuth) {
-    defaultOptions.headers['Authorization'] = `Bearer ${token}`;
-    console.log('🔑 Token agregado:', token.substring(0, 20) + '...');
-  }
+  // ❌ ELIMINAR: No usar token de localStorage (backend usa cookies)
+  // const token = localStorage.getItem('token');
+  // if (token && !options.skipAuth) {
+  //   defaultOptions.headers['Authorization'] = `Bearer ${token}`;
+  //   console.log('🔑 Token agregado:', token.substring(0, 20) + '...');
+  // }
 
   try {
-    console.log('📡 Enviando petición...');
     const response = await fetch(url, {
       ...defaultOptions,
       ...options
@@ -69,8 +68,7 @@ const API = {
   register: async (userData) => {
     return await apiRequest('/register', {
       method: 'POST',
-      body: JSON.stringify(userData),
-      skipAuth: true
+      body: JSON.stringify(userData)
     });
   },
 
@@ -78,8 +76,7 @@ const API = {
   login: async (credentials) => {
     return await apiRequest('/login', {
       method: 'POST',
-      body: JSON.stringify(credentials),
-      skipAuth: true
+      body: JSON.stringify(credentials)
     });
   },
 
@@ -87,8 +84,7 @@ const API = {
   verifyMfa: async (logId, code) => {
     return await apiRequest('/verify-mfa', {
       method: 'POST',
-      body: JSON.stringify({ logId, code }),
-      skipAuth: true
+      body: JSON.stringify({ logId, code })
     });
   },
 
