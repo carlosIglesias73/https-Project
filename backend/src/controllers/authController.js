@@ -118,16 +118,19 @@ const authController = {
     }
   },
 
-  // Cerrar sesión
+  // En authController.js - logout (mejorado)
   logout: async (req, res) => {
     try {
       const activeLog = await LoginLog.findByUserIdAndActive(req.user.id);
 
       if (activeLog) {
         await LoginLog.updateLogout(activeLog.id);
+        res.json({ message: 'Sesión cerrada exitosamente' });
+      } else {
+        // Si no hay sesión activa, cerrar todas las sesiones recientes
+        await LoginLog.closeAllActiveSessions(req.user.id);
+        res.json({ message: 'Todas las sesiones han sido cerradas' });
       }
-
-      res.json({ message: 'Sesión cerrada exitosamente' });
     } catch (err) {
       console.error('Error en logout:', err);
       res.status(500).json({ message: 'Error interno del servidor' });

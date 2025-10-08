@@ -3,10 +3,12 @@
   "version": "1.0.0",
   "description": "Backend API para sistema de autenticación con MFA",
   "main": "server.js",
+  
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
     "init-db": "node scripts/init-db.js",
+    "build": "echo 'No build needed'",
     "setup": "bash scripts/setup.sh"
   },
   "keywords": [

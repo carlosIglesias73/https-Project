@@ -7,7 +7,7 @@ const User = {
    */
   create: async ({ email, passwordHash, name }) => {
     const query = 'INSERT INTO users (email, password_hash, name) VALUES (?, ?, ?)';
-    const [result] = await db.execute(query, [email, passwordHash, name]);
+    const [result] = await db.pool.execute(query, [email, passwordHash, name]);
     return result.insertId;
   },
 
@@ -16,7 +16,7 @@ const User = {
    */
   findByEmail: async (email) => {
     const query = 'SELECT * FROM users WHERE email = ?';
-    const [rows] = await db.execute(query, [email]);
+    const [rows] = await db.pool.execute(query, [email]);
     return rows[0];
   },
 
@@ -25,7 +25,7 @@ const User = {
    */
   findById: async (id) => {
     const query = 'SELECT id, email, name, last_login, created_at FROM users WHERE id = ?';
-    const [rows] = await db.execute(query, [id]);
+    const [rows] = await db.pool.execute(query, [id]);
     return rows[0];
   },
 
@@ -34,7 +34,7 @@ const User = {
    */
   updateLastLogin: async (id) => {
     const query = 'UPDATE users SET last_login = NOW() WHERE id = ?';
-    await db.execute(query, [id]);
+    await db.pool.execute(query, [id]);
   }
 };
 

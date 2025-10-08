@@ -6,7 +6,7 @@ const getApiUrl = () => {
   }
   
   // En producción (Vercel) - actualizar con tu URL de backend
-  return 'https://tu-backend.vercel.app/api/auth';
+  return 'https://auth-backend-sigma-lac.vercel.app/api/auth';
 };
 
 const API_URL = getApiUrl();

@@ -3,14 +3,14 @@ const db = require('../config/database');
 
 const LoginLog = {
   /**
-   * Crear un nuevo registro de login
+   * Crear un nuevo log de login
    */
-  create: async ({ userId, ip, userAgent, success, code }) => {
+  create: async ({ userId, ip, userAgent, success = false, code = null }) => {
     const query = `
-      INSERT INTO login_logs (user_id, ip, user_agent, success, code)
+      INSERT INTO login_logs (user_id, ip, user_agent, success, code) 
       VALUES (?, ?, ?, ?, ?)
     `;
-    const [result] = await db.execute(query, [userId, ip, userAgent, success, code]);
+    const [result] = await db.pool.execute(query, [userId, ip, userAgent, success, code]);
     return result.insertId;
   },
 
@@ -19,56 +19,55 @@ const LoginLog = {
    */
   findById: async (id) => {
     const query = 'SELECT * FROM login_logs WHERE id = ?';
-    const [rows] = await db.execute(query, [id]);
+    const [rows] = await db.pool.execute(query, [id]);
     return rows[0];
   },
 
   /**
-   * Buscar log activo de un usuario (sin ended_at)
+   * Buscar log activo por usuario
    */
   findByUserIdAndActive: async (userId) => {
-    const query = `
-      SELECT id FROM login_logs
-      WHERE user_id = ? AND ended_at IS NULL
-      ORDER BY started_at DESC LIMIT 1
-    `;
-    const [rows] = await db.execute(query, [userId]);
+    const query = 'SELECT * FROM login_logs WHERE user_id = ? AND success = true AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1';
+    const [rows] = await db.pool.execute(query, [userId]);
     return rows[0];
   },
 
   /**
-   * Actualizar log como exitoso después de verificar MFA
+   * Marcar log como exitoso (SOLO éxito, sin cerrar sesión)
    */
   updateSuccess: async (id) => {
-    const query = 'UPDATE login_logs SET success = 1 WHERE id = ?';
-    await db.execute(query, [id]);
+    const query = `
+      UPDATE login_logs 
+      SET success = true
+      WHERE id = ?
+    `;
+    await db.pool.execute(query, [id]);
   },
 
   /**
-   * Registrar logout (duración de sesión)
+   * Cerrar sesión (logout manual o por expiración)
    */
   updateLogout: async (id) => {
     const query = `
-      UPDATE login_logs
-      SET ended_at = NOW(), duration = TIMESTAMPDIFF(SECOND, started_at, NOW())
+      UPDATE login_logs 
+      SET ended_at = NOW(),
+          duration = TIMESTAMPDIFF(SECOND, started_at, NOW())
       WHERE id = ?
     `;
-    await db.execute(query, [id]);
+    await db.pool.execute(query, [id]);
   },
 
   /**
-   * Obtener historial de logins de un usuario
+   * Cerrar todas las sesiones activas de un usuario (por expiración de token)
    */
-  getHistory: async (userId, limit = 10) => {
+  closeAllActiveSessions: async (userId) => {
     const query = `
-      SELECT id, ip, user_agent, success, started_at, ended_at, duration
-      FROM login_logs
-      WHERE user_id = ?
-      ORDER BY started_at DESC
-      LIMIT ?
+      UPDATE login_logs 
+      SET ended_at = NOW(),
+          duration = TIMESTAMPDIFF(SECOND, started_at, NOW())
+      WHERE user_id = ? AND success = true AND ended_at IS NULL
     `;
-    const [rows] = await db.execute(query, [userId, limit]);
-    return rows;
+    await db.pool.execute(query, [userId]);
   }
 };
 

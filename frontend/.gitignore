@@ -39,3 +39,4 @@ Thumbs.db
 
 # Dependency directories
 jspm_packages/
+.vercel

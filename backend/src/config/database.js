@@ -1,30 +1,40 @@
-// src/config/database.js
 const mysql = require('mysql2/promise');
-require('dotenv').config();
 
-const pool = mysql.createPool({
+// Usar valores por defecto solo si las variables de entorno existen
+const dbConfig = {
   host: process.env.DB_HOST || 'localhost',
   port: process.env.DB_PORT || 3306,
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'secure_login_db',
+  database: process.env.DB_NAME || 'railway',
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  enableKeepAlive: true,
-  keepAliveInitialDelay: 0
-});
+  acquireTimeout: 60000,
+  timeout: 60000,
+  ssl: process.env.NODE_ENV === 'production' ? {
+    rejectUnauthorized: false
+  } : undefined
+};
 
-// Manejar errores de conexión
-pool.on('connection', (connection) => {
-  console.log('Nueva conexión establecida a MySQL');
-  
-  connection.on('error', (err) => {
-    console.error('Error en conexión MySQL:', err);
-    if (err.code === 'PROTOCOL_CONNECTION_LOST') {
-      console.error('Conexión a la base de datos perdida.');
-    }
-  });
-});
+// Crear pool de conexiones
+const pool = mysql.createPool(dbConfig);
 
-module.exports = pool;
+// Función para probar la conexión
+async function testConnection() {
+  try {
+    const connection = await pool.getConnection();
+    console.log('✅ Conexión a MySQL exitosa');
+    connection.release();
+    return true;
+  } catch (error) {
+    console.error('❌ Error al conectar a MySQL:', error.message);
+    return false;
+  }
+}
+
+module.exports = {
+  pool,
+  getConnection: () => pool.getConnection(),
+  testConnection
+};

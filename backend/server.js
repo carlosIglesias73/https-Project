@@ -4,6 +4,7 @@ const cors = require('cors');
 
 // Importar rutas
 const authRoutes = require('./src/routes/auth.routes');
+const initRoutes = require('./src/routes/init.routes'); // 👈 Nueva ruta
 
 // Conexión a MySQL
 const db = require('./src/config/database');
@@ -46,6 +47,7 @@ app.get('/health', (req, res) => {
 
 // Rutas API
 app.use('/api/auth', authRoutes);
+//app.use('/api/init', initRoutes); // 👈 Registrar ruta de inicialización
 
 // Manejo de rutas no encontradas
 app.use((req, res) => {
@@ -64,14 +66,15 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Verificar conexión a MySQL al iniciar
+// Verificar conexión a MySQL al iniciar (pero no crashear si falla)
 db.getConnection()
   .then(() => {
     console.log('✅ Conexión a MySQL exitosa.');
   })
   .catch(err => {
-    console.error('❌ Error al conectar a MySQL:', err);
-    process.exit(1);
+    console.error('❌ Error al conectar a MySQL:', err.message);
+    console.log('⚠️  La aplicación continuará ejecutándose, pero algunas funciones pueden no trabajar correctamente.');
+    // NO usar process.exit(1) para que la app pueda servir el endpoint de inicialización
   });
 
 // Levantar servidor HTTP
