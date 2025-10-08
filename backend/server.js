@@ -14,6 +14,9 @@ const db = require('./src/config/database');
 
 const app = express();
 
+// ✅ IMPORTANTE: Confiar en proxies (necesario para Vercel/Railway)
+app.set('trust proxy', 1);
+
 // ✅ CABECERAS DE SEGURIDAD con Helmet
 app.use(helmet({
   contentSecurityPolicy: {
@@ -52,13 +55,36 @@ const loginLimiter = rateLimit({
 });
 
 // CORS configurado correctamente
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:4000',
+  'https://auth-frontend-rosy.vercel.app', // Tu frontend en producción
+  process.env.FRONTEND_URL
+].filter(Boolean);
+
 const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' 
-    ? process.env.FRONTEND_URL || 'https://tu-frontend.vercel.app'
-    : true, // En desarrollo permite todo
+  origin: (origin, callback) => {
+    // Permitir requests sin origin (como Postman, curl)
+    if (!origin) return callback(null, true);
+    
+    // En desarrollo, permitir todos
+    if (process.env.NODE_ENV === 'development') {
+      return callback(null, true);
+    }
+    
+    // En producción, verificar lista blanca
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.log('❌ Origen bloqueado por CORS:', origin);
+      callback(new Error('No permitido por CORS'));
+    }
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Length', 'X-JSON'],
+  maxAge: 86400 // 24 horas
 };
 
 app.use(cors(corsOptions));
@@ -95,6 +121,7 @@ app.get('/health', (req, res) => {
 // Rutas API
 app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth', authRoutes);
+app.use('/api/init', initRoutes); // 👈 NUEVO - Rutas de inicialización
 
 // Manejo de rutas no encontradas
 app.use((req, res) => {
