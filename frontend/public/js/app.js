@@ -1,6 +1,3 @@
-// Importar helpers (agregar en HTML: <script src="/js/api.js"></script>)
-// Importar auth (agregar en HTML: <script src="/js/auth.js"></script>)
-
 // Elemento de salida
 const out = document.getElementById('out');
 
@@ -50,7 +47,7 @@ document.getElementById('login')?.addEventListener('submit', async e => {
   }
 });
 
-// FORMULARIO DE MFA
+// ✅ FORMULARIO DE MFA - CORREGIDO
 document.getElementById('mfa-form')?.addEventListener('submit', async e => {
   e.preventDefault();
   const form = new FormData(e.target);
@@ -66,10 +63,17 @@ document.getElementById('mfa-form')?.addEventListener('submit', async e => {
     const { response, data } = await API.verifyMfa(logId, code);
     out.textContent = JSON.stringify(data, null, 2);
 
-    if (data.token) {
-      localStorage.setItem('token', data.token);
+    // ✅ VERIFICAR SI LA AUTENTICACIÓN FUE EXITOSA
+    if (response.ok && data.user) {
+      console.log('✅ Autenticación exitosa, redirigiendo...');
       localStorage.removeItem('logId');
-      window.location.href = '/welcome';
+      
+      // Redirigir después de mostrar el mensaje
+      setTimeout(() => {
+        window.location.href = '/welcome';
+      }, 1000);
+    } else if (!response.ok) {
+      console.error('❌ Error en verificación:', data.message);
     }
   } catch (error) {
     out.textContent = `Error: ${error.message}`;
