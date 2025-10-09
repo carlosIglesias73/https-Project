@@ -1,40 +1,29 @@
+// src/config/database.js
 const mysql = require('mysql2/promise');
 
-// Usar valores por defecto solo si las variables de entorno existen
-const dbConfig = {
+const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 3306,
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'railway',
+  database: process.env.DB_NAME || 'auth_db',
+  port: process.env.DB_PORT || 3306,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  acquireTimeout: 60000,
-  timeout: 60000,
-  ssl: process.env.NODE_ENV === 'production' ? {
-    rejectUnauthorized: false
-  } : undefined
-};
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0,
+  connectTimeout: 10000 // Usar connectTimeout en lugar de timeout
+});
 
-// Crear pool de conexiones
-const pool = mysql.createPool(dbConfig);
-
-// Función para probar la conexión
-async function testConnection() {
-  try {
-    const connection = await pool.getConnection();
-    console.log('✅ Conexión a MySQL exitosa');
+// Probar conexión
+pool.getConnection()
+  .then(connection => {
+    console.log('✅ Pool de MySQL creado correctamente');
     connection.release();
-    return true;
-  } catch (error) {
-    console.error('❌ Error al conectar a MySQL:', error.message);
-    return false;
-  }
-}
+  })
+  .catch(err => {
+    console.error('❌ Error al crear pool de MySQL:', err.message);
+  });
 
-module.exports = {
-  pool,
-  getConnection: () => pool.getConnection(),
-  testConnection
-};
+// ✅ Exportar el pool directamente (no como objeto con .pool)
+module.exports = pool;

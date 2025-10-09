@@ -1,24 +1,64 @@
 // src/services/emailService.js
-const { createTransport } = require('nodemailer');
-require('dotenv').config();
+const nodemailer = require('nodemailer');
 
-// Crear transporter de nodemailer
-const transporter = createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
-});
+// ✅ Configuración del transporter (lazy initialization)
+let transporter = null;
+let isVerified = false;
 
-// Verificar configuración de email al iniciar
-transporter.verify((error, success) => {
-  if (error) {
-    console.error('❌ Error en configuración de email:', error);
-  } else {
-    console.log('✅ Servidor de email configurado correctamente');
+const getTransporter = () => {
+  if (!transporter) {
+    console.log('📧 Inicializando transporter de email...');
+    
+    const emailUser = process.env.EMAIL_USER || process.env.SMTP_USER;
+    const emailPass = process.env.EMAIL_PASS || process.env.SMTP_PASS;
+    
+    if (!emailUser || !emailPass) {
+      console.error('❌ EMAIL_USER o EMAIL_PASS no configurados');
+      console.error('Variables disponibles:', {
+        EMAIL_USER: emailUser ? '✓' : '✗',
+        EMAIL_PASS: emailPass ? '✓' : '✗',
+        SMTP_USER: process.env.SMTP_USER ? '✓' : '✗',
+        SMTP_PASS: process.env.SMTP_PASS ? '✓' : '✗'
+      });
+    }
+    
+    transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+      port: parseInt(process.env.SMTP_PORT || '587'),
+      secure: process.env.SMTP_SECURE === 'true',
+      auth: {
+        user: emailUser,
+        pass: emailPass
+      },
+      tls: {
+        rejectUnauthorized: false
+      },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000
+    });
+    
+    console.log('✅ Transporter creado');
+    console.log(`📧 Email configurado: ${emailUser}`);
   }
-});
+  return transporter;
+};
+
+// ✅ Verificación bajo demanda (cuando se necesite)
+const verifyTransporter = async () => {
+  if (isVerified) return true;
+  
+  try {
+    const t = getTransporter();
+    await t.verify();
+    isVerified = true;
+    console.log('✅ Servidor de email verificado correctamente');
+    return true;
+  } catch (error) {
+    console.error('❌ Error verificando configuración de email:', error.message);
+    return false;
+  }
+};
 
 const emailService = {
   /**
@@ -27,8 +67,19 @@ const emailService = {
    * @param {string} code - Código MFA de 8 caracteres
    */
   sendMfaCode: async (email, code) => {
+    console.log(`📧 Preparando envío de código MFA a ${email}...`);
+    
+    // ✅ Verificar configuración antes de enviar
+    const verified = await verifyTransporter();
+    if (!verified && process.env.NODE_ENV === 'production') {
+      throw new Error('Servicio de email no configurado correctamente');
+    }
+    
+    const t = getTransporter();
+    const emailUser = process.env.EMAIL_USER || process.env.SMTP_USER;
+    
     const mailOptions = {
-      from: `"Sistema de Autenticación" <${process.env.EMAIL_USER}>`,
+      from: `"Sistema de Autenticación" <${emailUser}>`,
       to: email,
       subject: 'Código de Verificación MFA',
       html: `
@@ -52,12 +103,23 @@ const emailService = {
     };
 
     try {
-      await transporter.sendMail(mailOptions);
-      console.log(`✅ Correo MFA enviado a ${email}`);
-      return { success: true };
+      console.log(`📧 Enviando correo MFA a ${email}...`);
+      const info = await t.sendMail(mailOptions);
+      console.log(`✅ Correo MFA enviado exitosamente a ${email}`);
+      console.log(`📬 Message ID: ${info.messageId}`);
+      return { success: true, messageId: info.messageId };
     } catch (err) {
-      console.error('❌ Error al enviar correo:', err);
-      throw new Error('No se pudo enviar el correo de verificación');
+      console.error('❌ Error al enviar correo:', err.message);
+      console.error('Stack:', err.stack);
+      
+      // ✅ En desarrollo, permitir continuar sin email
+      if (process.env.NODE_ENV === 'development') {
+        console.log('⚠️  Modo desarrollo: Continuando sin enviar email');
+        console.log(`🔑 Código MFA (solo desarrollo): ${code}`);
+        return { success: true, dev_mode: true, code };
+      }
+      
+      throw new Error(`No se pudo enviar el correo de verificación: ${err.message}`);
     }
   },
 
@@ -68,31 +130,35 @@ const emailService = {
    * @param {string} userAgent - User agent del navegador
    */
   sendLoginNotification: async (email, ip, userAgent) => {
-    const mailOptions = {
-      from: `"Sistema de Autenticación" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: 'Nuevo inicio de sesión detectado',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #2c3e50;">Nuevo inicio de sesión</h2>
-          <p>Se ha detectado un nuevo inicio de sesión en tu cuenta:</p>
-          <ul style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
-            <li><strong>IP:</strong> ${ip}</li>
-            <li><strong>Navegador:</strong> ${userAgent}</li>
-            <li><strong>Fecha:</strong> ${new Date().toLocaleString('es-MX')}</li>
-          </ul>
-          <p style="color: #7f8c8d; font-size: 14px;">
-            Si no fuiste tú, cambia tu contraseña inmediatamente.
-          </p>
-        </div>
-      `
-    };
-
     try {
-      await transporter.sendMail(mailOptions);
+      const t = getTransporter();
+      const emailUser = process.env.EMAIL_USER || process.env.SMTP_USER;
+      
+      const mailOptions = {
+        from: `"Sistema de Autenticación" <${emailUser}>`,
+        to: email,
+        subject: 'Nuevo inicio de sesión detectado',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #2c3e50;">Nuevo inicio de sesión</h2>
+            <p>Se ha detectado un nuevo inicio de sesión en tu cuenta:</p>
+            <ul style="background: #f8f9fa; padding: 20px; border-radius: 8px;">
+              <li><strong>IP:</strong> ${ip}</li>
+              <li><strong>Navegador:</strong> ${userAgent}</li>
+              <li><strong>Fecha:</strong> ${new Date().toLocaleString('es-MX')}</li>
+            </ul>
+            <p style="color: #7f8c8d; font-size: 14px;">
+              Si no fuiste tú, cambia tu contraseña inmediatamente.
+            </p>
+          </div>
+        `
+      };
+
+      console.log(`📧 Enviando notificación de login a ${email}...`);
+      await t.sendMail(mailOptions);
       console.log(`✅ Notificación de login enviada a ${email}`);
     } catch (err) {
-      console.error('❌ Error al enviar notificación:', err);
+      console.error('❌ Error al enviar notificación:', err.message);
       // No lanzar error para no bloquear el login
     }
   }

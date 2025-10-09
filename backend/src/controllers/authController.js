@@ -73,13 +73,14 @@ const authController = {
     }
   },
 
-  // ✅ Verificación MFA - Paso 2: Validar código y generar JWT con cookie segura
+  // Verificación MFA - Paso 2: Validar código y generar JWT
   verifyMfa: async (req, res) => {
     try {
       const { logId, code } = req.body;
       if (!logId || !code) {
         return res.status(400).json({ message: 'Log ID y código requeridos' });
       }
+      
       const log = await LoginLog.findById(logId);
       if (!log || log.code !== code) {
         return res.status(401).json({ message: 'Código inválido' });
@@ -88,23 +89,30 @@ const authController = {
       // Obtener usuario
       const user = await User.findById(log.user_id);
 
-      // Generar token JWT con expiración corta
+      // Generar token JWT con expiración de 24 horas
       const token = jwt.sign(
         { id: user.id, email: user.email },
         JWT_SECRET,
-        { expiresIn: '1h' }
+        { expiresIn: '24h' }
       );
 
-      // ✅ Establecer cookie httpOnly segura
-      // CAMBIADO: Configuración para dominios cruzados (subdominios Vercel en producción)
-      // sameSite: 'none' es necesario para que se envíe la cookie en solicitudes cross-site
-      // secure: true es OBLIGATORIO cuando sameSite es 'none'
-      res.cookie('token', token, {
-        httpOnly: true,      // No accesible por JavaScript (protección XSS)
-        secure: true,        // ✅ Obligatorio para sameSite: 'none' - Solo HTTPS (producción)
-        sameSite: 'none',    // ✅ Permitir envío de cookie en solicitudes cross-site (subdominios)
-        maxAge: 3600000      // 1 hora en milisegundos
-      });
+      // Configuración de cookies
+      const isProduction = process.env.NODE_ENV === 'production';
+      
+      const cookieOptions = {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? 'none' : 'lax',
+        maxAge: 24 * 60 * 60 * 1000,
+        path: '/'
+      };
+
+      if (isProduction) {
+        cookieOptions.domain = '.vercel.app';
+      }
+
+      console.log('🍪 Configurando cookie con opciones:', cookieOptions);
+      res.cookie('token', token, cookieOptions);
 
       // Actualizar log como exitoso
       await LoginLog.updateSuccess(log.id);
@@ -118,8 +126,9 @@ const authController = {
           id: user.id,
           email: user.email,
           name: user.name
-        }
-        // ✅ NO enviar token en el body (ya está en cookie segura)
+        },
+        // ⚠️ TEMPORAL: Enviar token en body (necesario para cross-domain en Vercel)
+        token: token
       });
     } catch (err) {
       console.error('Error en verifyMfa:', err);
@@ -127,22 +136,28 @@ const authController = {
     }
   },
 
-  // ✅ Logout mejorado con limpieza de cookie
+  // Logout
   logout: async (req, res) => {
     try {
       const activeLog = await LoginLog.findByUserIdAndActive(req.user.id);
       if (activeLog) {
         await LoginLog.updateLogout(activeLog.id);
-      } else {
-        // Si no hay sesión activa, cerrar todas las sesiones recientes
-        await LoginLog.closeAllActiveSessions(req.user.id);
       }
-      // ✅ Limpiar cookie de autenticación
-      res.clearCookie('token', {
+
+      const isProduction = process.env.NODE_ENV === 'production';
+      
+      const cookieOptions = {
         httpOnly: true,
-        secure: true,        // Mismo valor que al establecerla
-        sameSite: 'none'     // Mismo valor que al establecerla
-      });
+        secure: isProduction,
+        sameSite: isProduction ? 'none' : 'lax',
+        path: '/'
+      };
+
+      if (isProduction) {
+        cookieOptions.domain = '.vercel.app';
+      }
+
+      res.clearCookie('token', cookieOptions);
       res.json({ message: 'Sesión cerrada exitosamente' });
     } catch (err) {
       console.error('Error en logout:', err);
@@ -153,6 +168,14 @@ const authController = {
   // Obtener información del usuario actual
   me: async (req, res) => {
     try {
+      if (!req.user) {
+        console.error('❌ req.user no está definido en /me');
+        return res.status(401).json({ 
+          message: 'Usuario no autenticado' 
+        });
+      }
+
+      console.log('✅ Devolviendo información del usuario:', req.user.email);
       res.json({
         user: req.user,
         message: 'Usuario autenticado correctamente'
