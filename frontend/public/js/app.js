@@ -1,30 +1,73 @@
-(async () => {
+// frontend/js/app.js
+// ELIMINAR ESTA LÍNEA: const out = document.getElementById('out');
+// La variable 'out' ya está definida en auth.js
+
+// Función encapsulada para cargar datos del usuario
+async function loadUserData() {
   try {
     const { data } = await API.me(); // Usamos la función 'me' definida en api.js
+    const userInfoElement = document.getElementById('user-info'); // Guardamos la referencia
+
+    // Verificamos si el elemento existe antes de manipularlo
+    if (!userInfoElement) {
+        console.error('❌ El elemento #user-info no se encontró en el DOM (dentro de loadUserData).');
+        // Opcional: Actualizar 'out' si está disponible
+        if (typeof out !== 'undefined' && out) {
+            out.textContent = 'Error: Elemento #user-info no encontrado.';
+        }
+        return; // Salimos de la función si no hay elemento
+    }
+
     if (data && data.user) {
-      document.getElementById('user-info').innerHTML = `
+      userInfoElement.innerHTML = `
         <p><strong>Email:</strong> ${data.user.email}</p>
         <p><strong>Nombre:</strong> ${data.user.name}</p>
         <p style="margin-top: 8px;"><strong>ID:</strong> ${data.user.id}</p>
         ${data.user.last_login ? `<p><strong>Último login:</strong> ${new Date(data.user.last_login).toLocaleString()}</p>` : ''}
       `;
       // Opcional: Actualizar 'out' con éxito (si se desea mostrar la respuesta completa)
-      // out.textContent = JSON.stringify(data, null, 2);
+      // if (typeof out !== 'undefined' && out) {
+      //     out.textContent = JSON.stringify(data, null, 2);
+      // }
     } else {
       throw new Error('Datos de usuario no disponibles o sesión inválida');
     }
   } catch (error) {
     console.error('Error al cargar usuario:', error);
-    document.getElementById('user-info').innerHTML = `
+    const userInfoElement = document.getElementById('user-info'); // Guardamos la referencia
+
+    // Verificamos si el elemento existe antes de manipularlo
+    if (!userInfoElement) {
+        console.error('❌ El elemento #user-info no se encontró en el DOM (en el catch de loadUserData).');
+        // Opcional: Actualizar 'out' si está disponible
+        if (typeof out !== 'undefined' && out) {
+            out.textContent = `Error: Elemento #user-info no encontrado (en catch). ${error.message}`;
+        }
+        return; // Salimos de la función si no hay elemento
+    }
+
+    userInfoElement.innerHTML = `
       <p style="color: #e74c3c;">
         <strong>Error:</strong> No se pudieron cargar los datos del usuario
       </p>
       <p style="font-size: 12px; margin-top: 8px;">${error.message}</p>
     `;
     // Opcional: Mostrar error en 'out' (si se desea mostrar el error allí también)
-    // out.textContent = `Error al cargar usuario: ${error.message}`;
+    // if (typeof out !== 'undefined' && out) {
+    //     out.textContent = `Error al cargar usuario: ${error.message}`;
+    // }
   }
-})();
+}
+
+// Verificar si el elemento específico de welcome.html existe antes de ejecutar la lógica
+if (document.getElementById('user-info')) {
+  // Solo ejecutar la carga de usuario si estamos en welcome.html
+  loadUserData();
+} else {
+  // Opcional: Puedes dejar un log si app.js se carga en una página donde no debería hacer nada
+  console.log("app.js cargado, pero no se encontró #user-info. No se ejecutó la carga de usuario.");
+}
+
 // FORMULARIO DE REGISTRO
 document.getElementById('register')?.addEventListener('submit', async e => {
   e.preventDefault();
