@@ -77,11 +77,9 @@ const authController = {
   verifyMfa: async (req, res) => {
     try {
       const { logId, code } = req.body;
-
       if (!logId || !code) {
         return res.status(400).json({ message: 'Log ID y código requeridos' });
       }
-
       const log = await LoginLog.findById(logId);
       if (!log || log.code !== code) {
         return res.status(401).json({ message: 'Código inválido' });
@@ -89,29 +87,32 @@ const authController = {
 
       // Obtener usuario
       const user = await User.findById(log.user_id);
-      
+
       // Generar token JWT con expiración corta
       const token = jwt.sign(
-        { id: user.id, email: user.email }, 
-        JWT_SECRET, 
+        { id: user.id, email: user.email },
+        JWT_SECRET,
         { expiresIn: '1h' }
       );
 
       // ✅ Establecer cookie httpOnly segura
+      // CAMBIADO: Configuración para dominios cruzados (subdominios Vercel en producción)
+      // sameSite: 'none' es necesario para que se envíe la cookie en solicitudes cross-site
+      // secure: true es OBLIGATORIO cuando sameSite es 'none'
       res.cookie('token', token, {
         httpOnly: true,      // No accesible por JavaScript (protección XSS)
-        secure: process.env.NODE_ENV === 'production', // Solo HTTPS en producción
-        sameSite: 'strict',  // Protección CSRF
+        secure: true,        // ✅ Obligatorio para sameSite: 'none' - Solo HTTPS (producción)
+        sameSite: 'none',    // ✅ Permitir envío de cookie en solicitudes cross-site (subdominios)
         maxAge: 3600000      // 1 hora en milisegundos
       });
 
       // Actualizar log como exitoso
       await LoginLog.updateSuccess(log.id);
-      
+
       // Actualizar última fecha de login
       await User.updateLastLogin(user.id);
 
-      res.json({ 
+      res.json({
         message: 'Autenticación exitosa',
         user: {
           id: user.id,
@@ -130,21 +131,18 @@ const authController = {
   logout: async (req, res) => {
     try {
       const activeLog = await LoginLog.findByUserIdAndActive(req.user.id);
-
       if (activeLog) {
         await LoginLog.updateLogout(activeLog.id);
       } else {
         // Si no hay sesión activa, cerrar todas las sesiones recientes
         await LoginLog.closeAllActiveSessions(req.user.id);
       }
-
       // ✅ Limpiar cookie de autenticación
       res.clearCookie('token', {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict'
+        secure: true,        // Mismo valor que al establecerla
+        sameSite: 'none'     // Mismo valor que al establecerla
       });
-
       res.json({ message: 'Sesión cerrada exitosamente' });
     } catch (err) {
       console.error('Error en logout:', err);
