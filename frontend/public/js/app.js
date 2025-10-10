@@ -42,8 +42,6 @@ async function loadUserData() {
 // Verificar si estamos en welcome.html
 if (document.getElementById('user-info')) {
   loadUserData();
-} else {
-  console.log("app.js cargado, pero no se encontró #user-info. No se ejecutó la carga de usuario.");
 }
 
 // FORMULARIO DE REGISTRO
@@ -108,8 +106,7 @@ document.getElementById('mfa-form')?.addEventListener('submit', async e => {
     const { response, data } = await API.verifyMfa(logId, code);
     out.textContent = JSON.stringify(data, null, 2);
 
-    if (response.ok && data.user) {
-      console.log('✅ Autenticación exitosa, redirigiendo...');
+    if (response.ok && data.user) {;
       localStorage.removeItem('logId');
       
       setTimeout(() => {

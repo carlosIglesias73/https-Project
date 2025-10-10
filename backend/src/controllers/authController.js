@@ -73,51 +73,36 @@ const authController = {
     }
   },
 
-  // Verificación MFA - Paso 2: Validar código y generar JWT
+  // Verificación MFA - Paso 2: Validar código y generar JWT con cookie segura (same-origin)
   verifyMfa: async (req, res) => {
     try {
       const { logId, code } = req.body;
       if (!logId || !code) {
         return res.status(400).json({ message: 'Log ID y código requeridos' });
       }
-      
+
       const log = await LoginLog.findById(logId);
       if (!log || log.code !== code) {
         return res.status(401).json({ message: 'Código inválido' });
       }
 
-      // Obtener usuario
       const user = await User.findById(log.user_id);
 
-      // Generar token JWT con expiración de 24 horas
       const token = jwt.sign(
         { id: user.id, email: user.email },
         JWT_SECRET,
-        { expiresIn: '24h' }
+        { expiresIn: '1h' }
       );
 
-      // Configuración de cookies
-      const isProduction = process.env.NODE_ENV === 'production';
-      
-      const cookieOptions = {
+      // Establecer cookie httpOnly segura (same-origin)
+      res.cookie('token', token, {
         httpOnly: true,
-        secure: isProduction,
-        sameSite: isProduction ? 'none' : 'lax',
-        maxAge: 24 * 60 * 60 * 1000,
-        path: '/'
-      };
+        secure: true,        // Solo HTTPS (producción)
+        sameSite: 'lax',     // Seguro para same-origin
+        maxAge: 3600000      // 1 hora
+      });
 
-      if (isProduction) {
-        cookieOptions.domain = '.vercel.app';
-      }
-
-      console.log('🍪 Configurando cookie con opciones:', cookieOptions);
-      res.cookie('token', token, cookieOptions);
-
-      // Actualizar log como exitoso
       await LoginLog.updateSuccess(log.id);
-
-      // Actualizar última fecha de login
       await User.updateLastLogin(user.id);
 
       res.json({
@@ -126,9 +111,8 @@ const authController = {
           id: user.id,
           email: user.email,
           name: user.name
-        },
-        // ⚠️ TEMPORAL: Enviar token en body (necesario para cross-domain en Vercel)
-        token: token
+        }
+        // ✅ No enviar token en el body
       });
     } catch (err) {
       console.error('Error en verifyMfa:', err);
@@ -136,28 +120,23 @@ const authController = {
     }
   },
 
-  // Logout
+  // Logout mejorado con limpieza de cookie (same-origin)
   logout: async (req, res) => {
     try {
       const activeLog = await LoginLog.findByUserIdAndActive(req.user.id);
       if (activeLog) {
         await LoginLog.updateLogout(activeLog.id);
+      } else {
+        await LoginLog.closeAllActiveSessions(req.user.id);
       }
 
-      const isProduction = process.env.NODE_ENV === 'production';
-      
-      const cookieOptions = {
+      // Limpiar cookie de autenticación (same-origin)
+      res.clearCookie('token', {
         httpOnly: true,
-        secure: isProduction,
-        sameSite: isProduction ? 'none' : 'lax',
-        path: '/'
-      };
+        secure: true,        // Mismo valor que al establecerla
+        sameSite: 'lax'      // Mismo valor que al establecerla
+      });
 
-      if (isProduction) {
-        cookieOptions.domain = '.vercel.app';
-      }
-
-      res.clearCookie('token', cookieOptions);
       res.json({ message: 'Sesión cerrada exitosamente' });
     } catch (err) {
       console.error('Error en logout:', err);

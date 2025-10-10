@@ -14,10 +14,10 @@ const db = require('./src/config/database');
 
 const app = express();
 
-// ✅ CRÍTICO: Confiar en proxies (Vercel/Railway usan X-Forwarded-For)
+// ✅ CRÍTICO: Confiar en proxies
 app.set('trust proxy', 1);
 
-// ✅ CORS DEBE IR ANTES DE HELMET Y OTROS MIDDLEWARES
+// ✅ CORS 
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:4000',
@@ -27,39 +27,24 @@ const allowedOrigins = [
 
 console.log('🌐 Orígenes permitidos:', allowedOrigins);
 
-// ✅ CONFIGURACIÓN CORS MEJORADA
 app.use(cors({
   origin: function (origin, callback) {
-    // Permitir solicitudes sin origin (como Postman, o same-origin)
-    if (!origin) {
-      return callback(null, true);
-    }
-    
-    // En desarrollo, permitir cualquier origen
-    if (process.env.NODE_ENV === 'development') {
-      console.log('✅ Modo desarrollo - origen permitido:', origin);
-      return callback(null, true);
-    }
-    
-    // En producción, verificar lista de orígenes
-    if (allowedOrigins.includes(origin)) {
-      console.log('✅ Origen permitido:', origin);
-      return callback(null, true);
-    }
+    if (!origin) return callback(null, true);
+    if (process.env.NODE_ENV === 'development') return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
     
     console.log('❌ Origen rechazado:', origin);
     callback(new Error('No permitido por CORS'));
   },
-  credentials: true, // ✅ CRÍTICO para cookies
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   exposedHeaders: ['Set-Cookie'],
-  maxAge: 86400, // Cache preflight por 24 horas
-  preflightContinue: false,
+  maxAge: 86400,
   optionsSuccessStatus: 204
 }));
 
-// ✅ CABECERAS DE SEGURIDAD con Helmet (DESPUÉS de CORS)
+// ✅ Helmet
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -69,7 +54,7 @@ app.use(helmet({
       imgSrc: ["'self'", "data:", "https:"],
     }
   },
-  crossOriginResourcePolicy: { policy: "cross-origin" }, // ✅ Importante para CORS
+  crossOriginResourcePolicy: { policy: "cross-origin" },
   xFrameOptions: { action: 'deny' },
   hsts: {
     maxAge: 31536000,
@@ -78,7 +63,7 @@ app.use(helmet({
   }
 }));
 
-// Middlewares de parseo
+// Middlewares
 app.use(cookieParser());
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
@@ -105,47 +90,97 @@ const loginLimiter = rateLimit({
 });
 
 // ✅ LOGGING MEJORADO
-if (process.env.NODE_ENV === 'development') {
-  app.use((req, res, next) => {
-    console.log(`📨 ${req.method} ${req.path}`);
-    console.log('Origin:', req.headers.origin);
-    console.log('Cookies:', req.cookies);
-    next();
+app.use((req, res, next) => {
+  console.log(`📨 ${req.method} ${req.originalUrl}`);
+  console.log('📍 Path:', req.path);
+  console.log('📍 Base URL:', req.baseUrl);
+  console.log('📍 Original URL:', req.originalUrl);
+  console.log('📍 Origin:', req.headers.origin);
+  console.log('📍 Host:', req.headers.host);
+  console.log('📍 X-Forwarded-Host:', req.headers['x-forwarded-host']);
+  console.log('---');
+  next();
+});
+
+// ✅ ENDPOINTS DE PRUEBA ESPECÍFICOS PARA DEBUG DEL PROXY
+app.get('/api/proxy-test', (req, res) => {
+  res.json({ 
+    message: '✅ Proxy test funcionando - Ruta: /api/proxy-test',
+    timestamp: new Date().toISOString(),
+    requestDetails: {
+      originalUrl: req.originalUrl,
+      path: req.path,
+      baseUrl: req.baseUrl,
+      method: req.method,
+      headers: {
+        origin: req.headers.origin,
+        host: req.headers.host,
+        'x-forwarded-host': req.headers['x-forwarded-host']
+      }
+    },
+    note: 'Esta ruta está en /api/proxy-test en el backend'
   });
-}
+});
+
+app.get('/api/auth/proxy-test', (req, res) => {
+  res.json({ 
+    message: '✅ Auth proxy test funcionando - Ruta: /api/auth/proxy-test',
+    timestamp: new Date().toISOString(),
+    path: '/api/auth/proxy-test',
+    backend: 'auth-backend-sigma-lac.vercel.app'
+  });
+});
 
 // Health check
-app.get('/health', (req, res) => {
+app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
     service: 'auth-api',
-    env: process.env.NODE_ENV || 'development'
+    env: process.env.NODE_ENV || 'development',
+    proxyInfo: {
+      'x-forwarded-host': req.headers['x-forwarded-host'],
+      'x-forwarded-proto': req.headers['x-forwarded-proto'],
+      originalUrl: req.originalUrl
+    }
   });
 });
 
-// ✅ Rutas API (después de middlewares)
+// ✅ Rutas API
 app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth', authRoutes);
 app.use('/api/init', initRoutes);
 
 // Manejo de rutas no encontradas
 app.use((req, res) => {
+  console.log(`❌ Ruta no encontrada: ${req.method} ${req.originalUrl}`);
   res.status(404).json({ 
-    message: 'Endpoint no encontrado',
-    path: req.path 
+    message: 'Endpoint no encontrado en el backend',
+    requestedPath: req.originalUrl,
+    method: req.method,
+    availableEndpoints: [
+      'GET /api/health',
+      'GET /api/proxy-test', 
+      'GET /api/auth/proxy-test',
+      'POST /api/auth/register',
+      'POST /api/auth/login',
+      'POST /api/auth/verify-mfa',
+      'POST /api/auth/logout',
+      'GET /api/auth/me',
+      'GET /api/init/setup'
+    ]
   });
 });
 
 // Manejo de errores global
 app.use((err, req, res, next) => {
-  console.error('❌ Error:', err.message);
+  console.error('❌ Error global:', err.message);
   
-  // Error de CORS
   if (err.message === 'No permitido por CORS') {
     return res.status(403).json({
       message: 'Acceso no permitido por CORS',
-      origin: req.headers.origin
+      origin: req.headers.origin,
+      allowedOrigins: allowedOrigins
     });
   }
   
@@ -157,14 +192,13 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Verificar conexión a MySQL al iniciar
+// Verificar conexión a MySQL
 db.getConnection()
   .then(() => {
     console.log('✅ Conexión a MySQL exitosa.');
   })
   .catch(err => {
     console.error('❌ Error al conectar a MySQL:', err.message);
-    console.log('⚠️  La aplicación continuará ejecutándose, pero algunas funciones pueden no trabajar correctamente.');
   });
 
 // Levantar servidor
@@ -173,11 +207,9 @@ const server = app.listen(port, '0.0.0.0', () => {
   const address = server.address();
   console.log(`🚀 API Backend ejecutándose en http://localhost:${port}`);
   console.log(`📍 Entorno: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔗 Health check: http://localhost:${port}/health`);
-  console.log(`🌐 Escuchando en: ${address.address}:${address.port}`);
-  console.log(`🔒 HTTPS: ${process.env.NODE_ENV === 'production' ? 'Manejado por Vercel' : 'Deshabilitado (desarrollo)'}`);
+  console.log(`🔗 Health check: http://localhost:${port}/api/health`);
+  console.log(`🔗 Proxy test: http://localhost:${port}/api/proxy-test`);
   console.log(`✅ Trust proxy: ${app.get('trust proxy')}`);
-  console.log(`✅ CORS configurado para: ${allowedOrigins.join(', ')}`);
 });
 
 module.exports = app;
